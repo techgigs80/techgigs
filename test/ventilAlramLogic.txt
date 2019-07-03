@@ -1,0 +1,476 @@
+# 환기로직 관련 비즈 소스
+-	간략 설명: 
+	Step1) 센서데이터 값을 받으면 비즈로직에서 관련 데이터 (pm10, c02, vocs, grade_oaq)의 가중치를 적용한 환기지수를 계산함
+	Step2) 5분이 안되었을 경우 환기지수를 계속 리스트에 저장한 후 5분이 지났을 때 리스트에 저장되어 있는 환기지수의 평균을 계산하여 값이 50보다 크면 환기 제어를 내림.
+	특이사항
+	이론적으로 1분에 센서데이터가 1개씩 올라올 경우 5분이면 5개가 올람옴. 단, 데이터가 일정하게 들어오지 않는 경우 5분동안 최대 10개 이상의 데이터가 포함 될 수 있음. 
+private void callMakeGrade(String tgt_seq, String dev_seq, String prod_id, Double pm10, Double co2, Double vocs, Double iaq, int grade_oaq, String occDt, String svcCode, long traceId) {
+    logger.debug("{} callMakeGrade() Param : tgt_seq={}, dev_seq={}, prod_id={}, pm10={}, co2={}, vocs={}, iaq={}, grade_oaq={}", traceId, tgt_seq, dev_seq, prod_id, pm10, co2, vocs, iaq, grade_oaq);
+
+    //OAQ 등급  재 설정
+    if (grade_oaq <= 0 || grade_oaq > 4)
+        grade_oaq = 2;    //보통
+
+    // 생성자 아래의 두 값을  자동 계산
+    // 환기지수(idxVent)   : 0 ~ 230
+    // 환기등급(gradeVent) : 0:무응답, 1:환기추천, 2:환기필수
+    VentilationIndex vi = new VentilationIndex(pm10, co2, vocs, grade_oaq);
+
+    int vent_idx = vi.getIdxVent();    // vent_idx (환기지수) : 0 ~ 230
+    logger.debug("{} callMakeGrade() getIdxVent => {}", traceId, vent_idx);
+
+    //IAQ 등급 산출
+    int grade_iaq = 2;
+
+    if (iaq >= 75)
+        grade_iaq = 4;    //매우나쁨
+    else if (iaq >= 50)
+        grade_iaq = 3;    //나쁨
+    else if (iaq >= 25)
+        grade_iaq = 2;    //보통
+    else
+        grade_iaq = 1;    //좋음
+
+    //이벤트버스로 넘겨 처리(푸시, 제어, 시간 평균 )
+    sendMessage(tgt_seq, dev_seq, prod_id, vent_idx, grade_iaq, grade_oaq, occDt, svcCode, traceId);
+}
+
+public VentilationIndex(Double pm10, Double co2, Double vocs, int oaq) {
+   super();
+   
+   getGradeVent(pm10, co2, vocs, oaq);
+}
+
+public int getGradeVent(Double pm10, Double co2, Double vocs, int oaq) {
+   //(getGradePm10(8.333333333333334) + getGradeCo2(49.59090909090909) + getGradeVocs(0.7727272727272727)) - 1 = 2
+   idxVent = (getWeightValPm10(pm10) + getWeightValCo2(co2) + getWeightValVocs(vocs)) - getWeightValOaq(oaq);
+   //System.out.println("getWeightValPm10(pm10)="+ getWeightValPm10(pm10) +" + getWeightValCo2(co2)="+ getWeightValCo2(co2) +" + getWeightValVocs(vocs)="+ getWeightValVocs(vocs) +" + getWeightValOaq(oaq)="+ getWeightValOaq(oaq));
+   //System.out.println("(getWeightValPm10("+pm10+") + getWeightValCo2("+co2+") + getWeightValVocs("+vocs+")) - getWeightValOaq("+oaq+") = "+idxVent);
+   
+   if(idxVent > 50)
+      gradeVent = 2; //2:환기필수
+   else if(idxVent > 25)
+      gradeVent = 1; //1:환기추천
+   else
+      gradeVent = 0; //0:무응답
+   
+   return gradeVent;
+}
+
+//PM10 등급별 가중치
+private int getWeightValPm10(Double pm10){
+   int grade = getGradePm10(pm10);
+   //System.out.println("getGradePm10(pm10)="+grade);    
+   
+   if(grade == 2)
+      return 12;
+   else if(grade == 3)
+      return 24;
+   else if(grade == 4)
+      return 60;
+   else
+      return 0;
+}
+
+//CO2 등급별 가중치
+private int getWeightValCo2(Double co2){
+   int grade = getGradeCo2(co2);
+   //System.out.println("getGradeCo2(co2)="+grade);      
+   
+   if(grade == 2)
+      return 10;
+   else if(grade == 3)
+      return 40;
+   else if(grade == 4)
+      return 80;
+   else
+      return 0;
+}
+
+//VOCs 등급별 가중치
+private int getWeightValVocs(Double vocs){
+   int grade = getGradeVocs(vocs);
+   //System.out.println("getGradeVocs(vocs)="+grade);    
+   
+   if(grade == 2)
+      return 0;
+   else if(grade == 3)
+      return 6;
+   else if(grade == 4)
+      return 6;
+   else
+      return 0;
+}
+
+//OAQ 등급별 가중치
+private int getWeightValOaq(int oaq){
+   //System.out.println("getWeightValOaq(oaq)="+oaq);    
+   
+   if(oaq == 2)
+      return 21;
+   else if(oaq == 3)
+      return 42;
+   else if(oaq == 4)
+      return 84;
+   else
+      return 0;
+}
+
+public void sendMessage(String tgt_seq, String dev_seq, String prod_id, int vent_index, int grade_iaq, int grade_oaq, String occDt, String svcCode, long traceId) {
+
+        JSONObject json = new JSONObject()
+                .put("traceId", traceId)
+                .put("tgt_seq", tgt_seq)
+                .put("dev_seq", dev_seq)
+                .put("prod_id", prod_id)
+                .put("vent_index", vent_index)     // 환기지수 0 ~ 230
+                .put("grade_iaq", grade_iaq)
+                .put("grade_oaq", grade_oaq)
+                .put("occDt", occDt)  //SHSEO.20180928 - IAQ 상태전달 기능 추가
+                .put("svcCode", svcCode); //SHSEO.20180928 - IAQ 상태전달 기능 추가
+
+        logger.debug("{} VENT_MSG_EVENT Publish {}", traceId, json.toString());
+
+        // NotiOutCaptainVerticle.java
+//        vertx.eventBus().publish("VENT_MSG_EVENT", json);
+        try {
+            notiOutCaptainService.procVentMsgEvent(json);
+        } catch (Exception e) {
+            e.printStackTrace();
+            logger.warn("{} Try-Catch : {}", traceId, e.toString());
+        }
+}
+
+public void procVentMsgEvent(JSONObject message) throws Exception {
+    //{"dev_seq":"1000003724","grade_iaq":1,"tgt_seq":"1000000865","grade_oaq":3,"vent_index":-32,"prod_id":"16102D8F15B0900058"}
+
+    JSONObject jo = message;
+    long traceId = jo.getLong("traceId");
+    String prod_id = jo.getString("prod_id");
+    jo = null;
+
+    logger.debug("{} VENT_MSG_EVENT Received {}", traceId, message.toString());
+
+    //Redis Hash Map 쿼리
+    String req = String.format("[\"%s\",\"%s\", %d]", "GET", REDIS_GROUP + prod_id, traceId);   //  LOGIC.CAPTAIN.{DEV_ID}
+    logger.trace("{} [REDIS REQUEST ]->{}", traceId, req);
+
+    //String getKey = new JSONArray(req).getString(1);
+    String getKey = REDIS_GROUP + prod_id;
+
+    redisTemplate.execute((RedisCallback<String>) connection -> {
+        StringRedisConnection stringConn = (StringRedisConnection) connection;
+
+        String resGet = stringConn.get(getKey);
+
+        //{"result":false,"message":"Empty list or set"}
+        JSONObject body = null;
+        //SHSEO.20180409 - 최초에 REDIS맵이 없을 경우 resGet을 아래와 같이 사용할 경우 NULL exception 발생하는 이슈 수정,
+        if(resGet != null) {
+            body = new JSONObject(resGet);
+            logger.debug("{} [REDIS RESPONSE]->[{}]:{}", traceId, req, body.toString());
+        }else{
+            logger.debug("{} [REDIS RESPONSE]->[{}]:NULL", traceId, req);
+        }
+
+        if (body != null) {
+            //callProcess(message.body().toString(), body.getJSONObject("data").toString());
+            callProcess(message.toString(), body.toString(), prod_id, traceId);
+        }else {
+            //callProcess(message.body().toString(), "{\"iaq_push_tm\":0,\"call_con\":[0,0,0,0],\"vent_int_tm\":0,\"vent_list\":[]}");
+            //callProcess(message.body().toString(), "{\"iaq_push_gr_seq\":0,\"vent_push_gr_seq\":0,\"iaq_push_tm\":0,\"call_con\":[0,0,0,0],\"vent_int_tm\":0,\"vent_list\":[]}");//add 20160908
+            //callProcess(message.toString(), "{\"iaq_push_gr_seq\":0,\"vent_push_gr_seq\":0,\"iaq_push_tm\":0,\"vent_push_tm\":0,\"call_con\":[0,0,0,0],\"vent_int_tm\":0,\"vent_list\":[]}", prod_id, traceId);//add 20160908
+            // SHSEO.20180410 - 환기데이터를 3초간격으로 쌓아서 보내기 위해 sqs_control_tm 추가
+            callProcess(message.toString(), "{\"iaq_push_gr_seq\":0,\"vent_push_gr_seq\":0,\"iaq_push_tm\":0,\"vent_push_tm\":0,\"call_con\":[0,0,0,0],\"vent_int_tm\":0,\"vent_list\":[], \"sqs_control_tm\":0}", prod_id, traceId);//add 20160908
+        }
+        return null;
+    });
+}
+
+/*
+ * push,api 호출 로직
+ */
+private void callProcess(String jsonMsg, String jsonCaptainMap, String devId, long traceId) {
+    //logger.debug("{} Call Func : callProcess - jsonMsg={}, jsonCaptainMap={}", traceId, jsonMsg, jsonCaptainMap);
+    //jsonCaptainMap: {"iaq_push_gr_seq":0,"vent_push_gr_seq":0,"iaq_push":1450096541,"call_controll":[1450096541, 1, 2, 0],"vent_int_time":1450096541,"vent_list":[30, 20, 22, 55, 66]}
+
+    JSONObject jo = new JSONObject(jsonMsg);
+    StringBuffer ctrl_msg = new StringBuffer();
+    String prod_id = jo.getString("prod_id");
+
+    SharedMapDevice sm = new SharedMapDevice(jsonCaptainMap, summaryTimeCaptain, summaryTimeAltCaptain, beginHourCaptain, endHourCaptain);    // PeriodSummaryTime => ex) 300
+    sm.setDevId(devId);
+    sm.setTraceId(traceId);
+
+    //SHSEO.20180427 - 최초 제어발생시간 저장
+    if(firstSqsControlTm == 0)
+    {
+        setSqs_Control_tm();
+        logger.info("######### SET FIRST SQS Control time :{} #########", firstSqsControlTm);
+    }
+
+    // 제어 시간 초기화(1시간에 한 번 무조건 내려보내기 위함)
+    if (sm.callConDataExpired()) {
+        sm.setInitCallConData();
+        logger.debug("{} callProcess - Initiation CallConData sm={}", traceId, sm.toString());
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // grade_iaq 제어 호출
+    int grade_iaq = jo.getInt("grade_iaq");
+
+    if (sm.getCall_con_iaq() > 0) {            // IAQ 등급(최종 발송한)
+        //저장되어 있는 값과 다르면 제어전송
+        if (sm.getCall_con_iaq() != grade_iaq) {
+            sm.setCall_con_iaq(grade_iaq);    //현재 값으로 설정
+
+            //제어 전송 문자열
+            ctrl_msg.append("0016:");    // "0016:"+grade_iaq; //IAQ : 0x0016 1(좋음) 2(보통) 3(나쁨) 4(아주나쁨)
+            ctrl_msg.append(grade_iaq);
+
+            //SHSEO.20180927 - 구글홈 IAQ상태 전달 기능 추가
+            kinesisProducerServiceImpl.putOneRecord(prod_id, grade_iaq, jo.getString("occDt"), jo.getString("svcCode"));
+        }
+    } else {
+        sm.setCall_con_iaq(grade_iaq);    // Map 업데이트
+        //제어 전송 문자열
+        ctrl_msg.append("0016:");        // "0016:"+grade_iaq; //IAQ : 0x0016 1(좋음) 2(보통) 3(나쁨) 4(아주나쁨)
+        ctrl_msg.append(grade_iaq);
+    }
+
+    //System.out.println("map:" + sm.toString());
+
+    // ----------------------------------------------------------------------------------------------
+    // 실내공기질 나쁨 ,IAQ지수레벨 처리 (매우나쁨  => 푸시 발송)
+    if (grade_iaq == 4) {
+        if (sm.iaqPushExpired()) {        // iaq 푸시 최종 발송 시간 이후 1시간(변경가능)이 지났는지 여부 확인 (true : 1시간 지났음)
+            DateTime issueDate = CowayDateUtil.nowUTCDateTime();
+            sm.setIaq_push_tm();        // IAQ발송 시간 재설정(현재시간)
+            sm.setIaq_push_gr_seq();    // 해제용 그룹시퀀스 생성
+            //sendMessage(prod_id, 2, sm.getIaq_push_gr_seq());    //환기:1, iaq:2, 환기해제:3, iaq해제:4
+            //sendPushMessage(traceId, prod_id, "INFO_AIR_001", "1", false, sm.getIaq_push_gr_seq());    //IAQ : INFO_AIR_001, 무조건 1
+
+            //SHSEO.20180417 - 푸시 타입 변경
+            PushParamCodeVO parm = new PushParamCodeVO();
+            parm.setNowStatus("APSTA402");
+            try {
+                postgreSQLPushService.makePushMessage(traceId, "BAP", "BAP204", "IAQ", prod_id, parm, 1);
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.error(e.getMessage());
+            }
+        }
+    } else {
+        //상태가 4가 아니면 해당 데이터 초기화 -> 수정 : 20160629 초기화 안함.. 매우나쁨 푸시는 무조건 24시간이 지나야 푸시 나감
+        //if(sm.getIaq_push_tm() > 0){
+        // sm.setInitIaq_push_tm();
+        //}
+
+        //해지 메시지 처리 add 2016/09/08
+        if (sm.getIaq_push_gr_seq() > 0) { // 기존에 발송된 기록이 있으면
+            //sendPushMessage(traceId, prod_id, "INFO_AIR_001", "1", true, sm.getIaq_push_gr_seq());    //IAQ : INFO_AIR_001, 무조건 1, 해제
+
+            //SHSEO.20180417 - 푸시 타입 변경
+            PushParamCodeVO parm = new PushParamCodeVO();
+            parm.setNowStatus("APSTA402");
+            try {
+                postgreSQLPushService.makePushMessage(traceId, "BAP", "BAP204", "IAQ", prod_id, parm, 0);
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.error(e.getMessage());
+            }
+            sm.initIaq_push_gr_seq();  // 초기화
+        }
+    }
+
+
+    // ----------------------------------------------------------------------------------------------
+    // 5분데이터 처리
+    // 환기지수(0~230)를 넣고 5분평균을 리턴
+    int avg = getVentIndex5MinAvg(sm, jo.getInt("vent_index"));        // 현재의 신규 vent_index: 환기지수 0 ~ 230
+    logger.debug("{} callProcess - checkpoint2 : avg={}", traceId, avg);
+
+    // 50이 넘으면 Noti : 이전 발송한 명령과 관계 없이 무조건 5분마다 콜
+    // 푸시는 1시간에 한번만 20161222
+
+    if (avg > notiVentMaxValue) {    // NotiVentMaxVal = 50
+        // 제어 발송(환기 켜기)
+        if (ctrl_msg.length() > 0) ctrl_msg.append(",");
+
+        ctrl_msg.append("0020:1");    // "0020:1" => 환기 : 0(끄기), 1(켜기)
+        sm.setCall_con_vent(1);
+
+        //환기 푸시 발송
+        //sendMessage(prod_id, 1, sm.getVent_push_gr_seq());   //환기:1, iaq:2, 환기해제:3, iaq해제:4
+        if (sm.ventPushExpired()) {    // 1시간에 한 번 edit 20161222
+            sm.setVent_push_tm();
+            sm.setVent_push_gr_seq();    //해제용 그룹시퀀스 생성
+            //sendPushMessage(traceId, prod_id, "INFO_AIR_002", "1", false, sm.getVent_push_gr_seq());    //환기 : INFO_AIR_002, 무조건 1
+
+            //SHSEO.20180417 - 푸시 타입 변경
+            try {
+                postgreSQLPushService.makePushMessage(traceId, "BAP", "BAP203", "VENTILATE", prod_id, null, 1);
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.error(e.getMessage());
+            }
+        }
+
+    } else if (avg != -9999) {
+        //제어 발송(환기 끄기)
+        if (ctrl_msg.length() > 0) ctrl_msg.append(",");
+
+        ctrl_msg.append("0020:0");    //"0020:0";  //환기 : 0(끄기), 1(켜기)
+        sm.setCall_con_vent(0);
+
+
+        //해지 메시지 처리 add 2016/09/09
+        if (sm.getVent_push_gr_seq() > 0) {//기존에 발송된 기록이 있으면
+            //sendPushMessage(traceId, prod_id, "INFO_AIR_002", "1", true, sm.getVent_push_gr_seq());    //환기 : INFO_AIR_002, 무조건 1
+            sm.initVent_push_gr_seq();//초기화
+
+            //SHSEO.20180417 - 푸시 타입 변경
+            try {
+                postgreSQLPushService.makePushMessage(traceId, "BAP", "BAP203", "VENTILATE", prod_id, null, 0);
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.error(e.getMessage());
+            }
+        }
+    } else if (avg == -9999) {
+        // skipped;  => 환기제거 관련해서 아무것도 하지 않음
+    }
+
+
+    // ----------------------------------------------------------------------------------------------
+    // 수정 : 20161124 : (항상) 모든 제어 메시지에 OAQ제어 내려 보내기 (OAQ지수레벨 기기에 내려주기)
+    // grade_oaq 제어 호출
+    if (ctrl_msg.length() > 0) {
+        int grade_oaq = jo.getInt("grade_oaq");
+        //제어 전송 문자열
+        ctrl_msg.append(",");
+        ctrl_msg.append("0017:");    //"0017:"+grade_oaq;  //OAQ : 0x0017 1(좋음) 2(보통) 3(나쁨) 4(아주나쁨)
+        ctrl_msg.append(grade_oaq);
+    }
+
+    // ----------------------------------------------------------------------------------------------
+
+    //SHSEO.20180328 - 제어메세지 종류에 따라 SQS나 AWS IOT API로 구분해서 제어 내림
+    //ctrl_msg에서 0020값을 뽑아내는 방법으로 0002(환기)KEY가 있으면 SQS호출, 없으면 AWS IOT API 호출
+    //제어 호출
+    if (ctrl_msg.length() > 0) {
+        //logger.debug("{}=========> ctrl_msg = {}", prod_id, ctrl_msg);
+
+        if(ctrl_msg.toString().contains("0020:1")){//환기 알림 ON일 경우
+            // 환기데이터가 포함된 경우 Json List로 데이터 쌓아서 관리 필요함!!
+            SqsCtrlVO ctrlSqs = new SqsCtrlVO();
+            ctrlSqs.setDev_id(prod_id);
+            ctrlSqs.setData(ctrl_msg.toString());
+            ctlMsgs.put(ctrlSqs);
+
+            logger.info("{} (Queueing) dev={}, ctlMsgs_count={}", traceId, prod_id, ctlMsgs.length());
+
+            if (sqsControlExpired() || ctlMsgs.length() >= 2000) {        // 환기 제어 최종 발송 시간 이후 3초가 지났거나? List Size가 400보다 큰지? 여부 확인 (true : 3초 지났음)
+                setSqs_Control_tm();          // 환기데이터 SQS 발송 시간 재설정(현재시간)
+
+                ObjectMapper objectMapper = new ObjectMapper();
+                String jsonStr = null;
+                try {
+                    jsonStr = objectMapper.writeValueAsString(ctlMsgs);
+                    //logger.debug("========================> LIST Control Msg:" + jsonStr);
+                } catch  (JsonProcessingException e) {
+                    e.printStackTrace();
+                }
+
+                //비실시간성 데이터 - 환기 데이터를 10초 간격으로 SQS API를 통해 SQS에 쌓음 (Max: 400개)
+                this.callDeviceControlApiGetMulti(prod_id, jsonStr, ctlMsgs.length(), traceId);
+
+                //환기 데이터 초기화
+                ctlMsgs = new JSONArray();
+            }
+
+        }else {
+            //실시간성 데이터 - AWS IOT Shadow API 호출
+            //환기알림 OFF일 경우
+            try {
+                boolean result = false;
+                result = callDeviceControlApiPOSTMulti(prod_id, ctrl_msg.toString());
+                if(result != true){
+                    logger.info("Control TRY2, prod_id:{}, ctrl_msg:{}", prod_id, ctrl_msg.toString());
+                    result = this.callDeviceControlApiPOSTMulti(prod_id, ctrl_msg.toString()); // IOT Shadow API
+                    //2번이상 실패시, SQS로 처리
+                    if(result != true){
+                        logger.info("Control TRY3 - use SQS, prod_id:{}, ctrl_msg:{}", prod_id, ctrl_msg.toString());
+                        callDeviceControlApiGetSingle(prod_id, ctrl_msg.toString());    //20151108, Master api로 수정
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+
+                //SHSEO.20180521 - Try Retry
+                try {
+                    logger.info("Control TRY2, prod_id:{}, ctrl_msg:{}", prod_id, ctrl_msg.toString());
+                    callDeviceControlApiPOSTMulti(prod_id, ctrl_msg.toString()); // IOT Shadow API
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    //ShardMap 업데이트
+    if (sm.isUpdated()) {
+        //0:명령, 1:키, 2:값(String)
+        String key = REDIS_GROUP +  prod_id;
+        String value = sm.toString();
+        logger.debug("{} [REDIS REQUEST ]->SET {}:{}", traceId, key, value);
+
+        redisTemplate.opsForValue().set(key, value);
+    }
+}  // end of func.
+
+/*
+ * 5분 평균 환기지수 계산 및 리턴
+ * 반환값 : 특정시간이 지나 평균값을 반환하지 않으면 -9999 리턴
+ */
+private int getVentIndex5MinAvg(SharedMapDevice sm, int ventidx) {
+    int result = -9999;    //평균아님
+
+    if (sm.getVent_list().size() > 0) {
+        sm.putVentData(ventidx);
+        result = sm.flushVentData();    // result => 특정시간(5분) 지나면 평균값 리턴(기존데이터 clear), 아니면 -9999 리턴
+    } else {
+        sm.putVentData(ventidx);
+    }
+
+    return result;
+}
+
+/*
+ * 환기데이터 추가
+ */
+public void putVentData(int data) {
+    this.vent_list.add(data);
+    isUpdated = true;
+    logger.trace("Add vent data[{}], count : {}", data, vent_list.size());
+}
+
+/*
+ * 환기데이터  평균구하기
+ */
+private int getVentDataAvg() {
+    int sum = 0;
+    int nSize = vent_list.size();
+
+    for (int i = 0; i < nSize; i++) {
+        sum += vent_list.get(i);
+    }
+
+    if (nSize == 0) return sum;
+    else return sum / nSize;
+}
+
+private List<Integer> vent_list;    // 환기지수 계산용 5분 정보 (제어 전송용)
+
+ 
