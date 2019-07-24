@@ -33,7 +33,7 @@ RUN apt-get update && apt-get -yq dist-upgrade \
 # Install python3 and upgrade pip
 RUN add-apt-repository ppa:jonathonf/python-3.6 \
  && apt-get update --fix-missing \
- && apt-get install -yq build-essential python3.6 python3.6-dev python3-pip python3.6-venv \
+ && apt-get install -yq build-essential python3.6 python3.6-dev python3-pip python3.6-venv python3.6-minimal\
  && rm -rf /var/lib/apt/lists/*
 
 RUN python3.6 -m pip install pip --upgrade \
