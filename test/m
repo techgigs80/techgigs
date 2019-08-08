@@ -1,0 +1,59 @@
+import argparse
+import os
+import Drain
+import pickle
+import logging
+
+
+parser = argparse.ArgumentParser(description='python Implementation of Drain')
+parser.add_argument('--input_dir', type = str, help='input_dir')
+parser.add_argument('--output_dir', default=None, help='output_dir')
+parser.add_argument('--log_file', type=str, default=None, help='log_file')
+parser.add_argument('--sim_threshold', type=float, default=0.5 , help='Similarity threshold')
+parser.add_argument('--depth', type=int, default=4, help='Depth of all leaf nodes')
+parser.add_argument('--sim_method', type=str, default='seqDist', help='similarity methods: seqDist, seqDistOnlyToken, seqDistVarCont)')
+parser.add_argument('--alpha', type=float, default=0.2, help='seqDistVarCont <*> weights')
+parser.add_argument('--is_training', action='store_true', help='is_training' )
+
+
+#args, unknown = parser.parse_known_args()
+args = parser.parse_args()
+
+logger = logging.getLogger()
+logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+
+if __name__=="__main__":
+    
+    regex      = [
+        r'blk_(|-)[0-9]+' , # block id
+        r'(/|)([0-9]+\.){3}[0-9]+(:[0-9]+|)(:|)', # IP
+        r'(?<=[^A-Za-z0-9])(\-?\+?\d+)(?=[^A-Za-z0-9])|[0-9]+$', # Numbers
+    ]
+    log_format = '<Date> <Time> <Pid> <Level> <Component>: <Content>'  # HDFS log format
+    
+    if args.is_training:
+        logging.info('Bulid parser tree for training')   
+        parser = Drain.LogParser(log_format, 
+                                 indir= args.input_dir, 
+                                 outdir= args.output_dir,  
+                                 depth= args.depth, 
+                                 st= args.sim_threshold, 
+                                 rex= regex,
+                                 sim= args.sim_method)
+    else:
+        logging.info('Bulid parser tree for test')   
+        with open(os.path.join(args.output_dir,'train_parser.pkl'), 'rb') as f:
+            parser = pickle.load(f)
+
+    parser.parse(args.log_file, is_training=args.is_training)
+
+    print('number of clusters:',len(parser.logCluL))
+
+    # save train results
+    parser.saver(parser.logCluL, is_training= args.is_training)
+
+
+    # save as pickle
+    if args.is_training:
+        with open(os.path.join(args.output_dir,'train_parser.pkl'), 'wb') as f:
+            pickle.dump(parser,f, protocol=pickle.HIGHEST_PROTOCOL)
