@@ -12,6 +12,16 @@
 
 ## python snippets
 
+### nvidia gpu mode change
+
+```bash
+## 0 default
+## 1 Exclusive Thread
+## 2 Prohibited
+## 3 Exclusive Process
+nvidia-smi -i ${GPU_ID} -c ${MODE_ID}
+```
+
 ### command search
 
 ```python
@@ -34,4 +44,18 @@ import seaborn as sns
 colors = ['#34495e','#2ecc71','#3498db','#FFFF00', '#e74c3c','#a9a9a9']
 sns.set(style="ticks", color_codes=True)
 plt.style.use('seaborn-darkgrid')
+
+## get index from list by condition
+def indices(list, filtr=lambda x: bool(x)):
+  return [i for i,x in enumerate(list) if filtr(x)]
+```
+
+
+## Docker configuration
+
+### install the docker enginer through curl
+
+```bash
+curl -fsSL https://get.docker.com >> docker.sh
+sudo sh ./docker.sh
 ```
