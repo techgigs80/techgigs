@@ -101,18 +101,29 @@ chmod 775 [CO-WORK_FOLDER_YOU_WANT]
 nvidia-docker network create [DOCKER_NET_NAME]
 NV_GPU='0,1,3,4'  nvidia-docker run -d \
                                     --user root \
-                                    --hostname [HOST_YOU_WANT]
-                                    --network [DOCKER_NET_NAME]
+                                    --hostname [HOST_YOU_WANT] \
+                                    --network [DOCKER_NET_NAME] \
                                     -p [JUPYTER_PORT]:8888 \
                                     -p [TENSORBOARD_PORT]:6006 \
+                                    -p [VISDOM_PORT]:8097 \
                                     -e NB_UID=[ACCOUNT_ID] \
                                     -e NB_GID=[GROUP_ID_YOU_CREATED] \
-                                    -v [CO-WORK_FOLDER_YOU_WANT]:/home/jovyan/work/ \
+                                    -v [WORK_FOLDER_YOU_WANT]:/home/jovyan/work/ \
                                     --name [NAME_YOU_WANT] \
                                     lucas.ku/jupyterlab:0.1
 
+## visdom configuration
+git clone https://github.com/facebookresearch/visdom.git [FOLDER_YOU_WANT]/visdom
+cd [FOLDER_YOU_WANT]/visdom
+mkdir ~/.visdom
+pip install .
+
+python -m visdom.server --hostname 127.0.0.1 -env_path "~/.visdom/" -port 8097
+# or outside of container
+docker exec -it -u jovyan [CONTAINER_NAME] /bin/bash -c "source [VIRTUALENV_PATH]/.virtualenvs/[ENV_NAME]/bin/activate;python -m visdom.server --hostname 127.0.0.1 -env_path ~/.visdom/ -port 8097"
+
 ## for make virtualenv
-nvidia-docker exec -it -u jovyan note1 bash
+nvidia-docker exec -it -u jovyan note bash
 mkvirtualenv -p python [ENV_NAME]
 python -m ipykernel install --user --name=p_infra
 ```

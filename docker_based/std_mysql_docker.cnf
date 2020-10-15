@@ -1,0 +1,153 @@
+[client]
+#socket                         = /data/mysql.sock
+#port                           = 3306
+default-character-set	= utf8
+
+[mysqld]
+# generic configuration options
+# customized options
+#socket                          = /data/mysql.sock
+#port                            = 3306
+#user                            = mysql
+#pid-file                        = /data/mysqld.pid
+character-set-client-handshake  = FALSE
+#bind-address                    = 0.0.0.0
+big-tables
+table_cache                     = 128
+
+init_connect                    = SET collation_connection = utf8_general_ci
+init_connect                    = SET NAMES utf8
+character-set-server            = utf8
+collation-server                = utf8_general_ci
+
+# storage
+default_storage_engine          = InnoDB
+#datadir                         = /data/tables
+#plugin_dir                      = /data/plugins
+#tmpdir                          = /data/mysqltmp
+
+# logging options
+log_error                       = /var/log/mysql/mysqld.err
+log-queries-not-using-indexes   = 0
+slow_query_log
+slow_query_log_file             = /var/log/mysql/slow_query.log
+#general_log
+#general_log_file                = /var/log/mysql/mysqld.log
+log_slow_admin_statements                                 # DDL쿼리도 슬로우 쿼리에 기록
+aria_log_dir_path               = /var/log/mysql/
+log_bin                         = /var/log/mysql/mariadb-bin/mariadb-bin
+log_bin_index                   = /var/log/mysql/mariadb-bin.index
+expire_logs_days                = 14
+sync-binlog	                    = 1
+binlog_format                   = ROW							# modified
+max_binlog_size                 = 50M
+
+## MySQL 스케줄러를 사용하려면 아래 event-scheduler 옵션을 ON으로 변경
+# event-scheduler = OFF                                   # 이벤트 비활성
+sysdate-is-now = 1                                        # 함수 sysdate()와 now() 동일하게 처리
+
+# caches and limits
+binlog_cache_size               = 2M
+query_cache_size                = 64M
+query_cache_limit               = 1G
+thread_stack                    = 240K
+long_query_time                 = 5
+tmp_table_size                  = 64M                     # 메모리 내의 임시테이블 크기 초과시 디스크에 저장
+max_heap_table_size             = 64M                     # MEMORY 테이블의 최대크기
+back_log                        = 100                     # 동시 접속 시 대기 시킬 수 있는 커넥션 수
+max_connections                 = 500                     # 최대 클라이언트 연결 수
+thread_cache_size               = 50                      # 다쓴 쓰레드를 스레드풀에 저장할 갯수
+open-files-limit                = 65535
+table-definition-cache          = 1024
+table_open_cache                = 2048                    # 각 쓰레드별 오픈할 테이블수
+wait_timeout                    = 36000                    # 커넥션 최대 대기시간(초)
+interactive_timeout             = 36000 
+connect_timeout                 = 36000
+max_allowed_packet              = 512M                    # 요청된 쿼리의 최대길이의 값
+max_connect_errors              = 1000000
+group_concat_max_len            = 1024                    # GROUP_CONCAT()함수 사용시 컬럼값 최대크기
+sort_buffer_size                = 8M                      # 정렬에 필요한 버퍼의 크기 ORDER BY 또는 GROUP BY 연산 속도와 관련
+join_buffer_size                = 8M                      # 조인이 테이블을 풀스캔 하기위해 사용하는 버퍼크기
+read_buffer_size                = 2M                      # 테이블 스캔에 필요한 버퍼크기
+read_rnd_buffer_size            = 16M                     # 디스크 검색을 피하기위한 랜덤 읽기 버퍼크기
+transaction_isolation           = READ-COMMITTED
+
+# innodb options
+innodb_file_per_table           = 1                       # 테이블 단위로 테이블스페이스 할당, 활성시 확장자 .ibd 파일이 생성됨
+#innodb_data_home_dir            = /data/tables            # innodb 홈디렉터리 경로
+
+# 파일명 : 초기용량 : 자동증가 : 최대사이즈
+innodb_data_file_path           = ibdata1:500M;ibdata2:500M:autoextend
+#innodb_log_group_home_dir       = /data/tables
+#innodb_log_arch_dir             = /var/log/mysql              # 로그 디렉터리 정보
+innodb_autoinc_lock_mode        = 2
+
+# 데이터와 인덱스를 캐시하기 위해 사용하는 메모리 버퍼크기	modified
+# innodb에서 사용할 메모리 양으로 Dedicated MySQL Server 전체 메모리의 50 ~ 80% 정도로 설정
+innodb_buffer_pool_size         = 1G
+innodb_log_file_size            = 2G                      # 로그 파일 사이즈로 버퍼풀 사이즈의 25% 정도로 설정
+innodb_log_buffer_size          = 16M                     # Redo 로그 버퍼크기, 로그 버퍼 사이즈로 성능에 맞춰 로그를 기록하는 경우 크게 설정
+innodb_flush_log_at_trx_commit  = 2                       # 커밋 로그 옵션으로 성능 최적화로 1분마다 저장되도록 2로 설정, 1 = 트랜젝션 실행할때마다 로그 파일에 기록되고 디스크 플러시가 실행
+#innodb_support_xa               = OFF                    # 트렌젝션 2-Phase Commit 지원, 디스크 플러시 횟수를 줄여 성능항상, 분산데이터 기능 (2-PhaseCommit)
+innodb_lock_wait_timeout        = 600                     # 롤백이 진행되기 전에 LOCK을 대기하는 시간(초)
+innodb_force_recovery           = 0                       # 크래시 복구 모드 설정
+innodb_use_native_aio           = 0
+innodb_flush_method             = O_DIRECT                # O_DIRECT=운영체제의 버퍼를 사용 않고 IO 실행, RAID 컨트롤러(캐시메모리 장착된)가 없거나 SAN 사용시 O_DIRECT를 사용 하지 않음
+innodb_thread_concurrency       = 16                      # InooDB내에 쓰레드 갯수, 변수 0은 쓰레드간 동시성 비활성화
+innodb_doublewrite              = 0                       # 이중 쓰기 버퍼 비활성
+innodb_sync_spin_loops          = 20                      # 쓰레드가 지연되기 전에 (suspended) 풀어 주기 위해 InnoDB 뮤텍스 (mutex)를 기다리는 쓰레드의 대기 시간
+innodb_table_locks              = 1                       # LOCK TABLES은 AUTOCOMMIT=0경우에, InnoDB로 하여금 내부적으로 테이블을 잠금
+innodb_thread_sleep_delay       = 1000                    # InnoDB 큐를 조이닝 (joining)하기 전에 InnoDB 쓰레드가 일시 정지 (sleep)하는 시간
+innodb_max_purge_lag            = 0                       # 퍼지 연산 (purge operation)이 래깅 (lagging)될 때 INSERT, UPDATE 및 DELETE 연산을 지연 시키는 방법을 제어, 디폴트값 0일시 지연 없음
+innodb_commit_concurrency       = 0                       # 동시에 실행되는 쓰레드의 숫자. 이 값이 0이 되면 동시성 제어 (concurrency control)가 비활성화
+
+# InnoDB에 동시에 들어갈 수 있는 쓰레드의 숫자는 innodb_thread_concurrency 변수로 알아볼 수가 있다. 여러 개의 쓰레드가 이미 Concurrency 한계에 도달하였다면, 하나의 쓰레드만이 큐에 들어갈 수 있음
+# 하나의 쓰레드가 InnoDB에 들어가게 되면, innodb_concurrency_tickets의 값과 일치하는 “자유 티켓”의 숫자가 주어지고, 쓰레드가 자신의 티켓을 사용하기 전 까지는 자유롭게 InnoDB에 들어가고 나올 수가 있다.
+# 이런 후에는, 쓰레드는 다시금 일관성 검사를 하고 InnoDB에 다시 들어가려고 시도하게 된다
+innodb_concurrency_tickets			= 500
+innodb_page_size                = 16384
+#innodb_additional_mem_pool_size = 16M
+innodb_write_io_threads         = 8
+innodb_read_io_threads          = 8
+innodb_log_files_in_group       = 3
+innodb_max_dirty_pages_pct      = 90
+
+[mysqldump]
+# Do not buffer the whole result set in memory before writing it to
+# file. Required for dumping very large tables
+quick
+max_allowed_packet              = 16M
+default-character-set           = utf8
+
+[mysql]
+no-auto-rehash                                            # 자동 완성 기능 비활성화
+show-warnings                                             # 경고 발생시 메세지 자동 출력
+default-character-set           = utf8
+prompt                          = \u@\h:\d\_\R:\m:\\s>    # SQL 프롬프트 설정
+# Only allow UPDATEs and DELETEs that use keys.
+safe-updates                                              # 데이터 변경 또는 삭제시 where 구문 필수입력
+#pager=”less -n -i -F -X -E”                              # 데이터 출력시 페이징처리
+
+[mysqlhotcopy]
+interactive-timeout
+
+[mysqld_safe]
+# Increase the amount of open files allowed per process. Warning: Make
+# sure you have set the global system limit high enough! The high value
+# is required for a large number of opened tables
+open-files-limit = 8192
+
+[myisam]
+key_buffer_size                 = 32M                     # 인텍스 캐시 크기, InnoDB를 사용하지 않고 MyISAM만 사용한다면 key_buffer_size를 4GB까지 설정
+bulk_insert_buffer_size         = 32M                     # 대량 삽입에 사용된 트리 캐시의 크기, 쓰레드당 각각 할당됨
+myisam_sort_buffer_size         = 1M                      # 인덱스 정렬시 할당되는 버퍼의 크기
+myisam_max_sort_file_size       = 1G                      # 인덱스 재 생성시 사용할 임시 파일의 최대 크기
+myisam_repair_threads           = 1                       # 정렬 복구시 사용될 쓰레드 갯수
+myisam-recover                  = FORCE,BACKUP            # MyISAM 테이블을 열었을시 테이블 자동복구
+#ft_min_word_len                = 3                       # 하나의 FULLTEXT 인덱스에 포함 되는 단어의 최소 길이 값, 변경 후 REPAIR TABLE tbl_name QUICK 으로 재 구축해야함
+
+[myisamchk]
+key_buffer_size                 = 512M
+sort_buffer_size                = 512M
+read_buffer                     = 8M
+write_buffer                    = 8M

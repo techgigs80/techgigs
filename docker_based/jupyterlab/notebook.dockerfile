@@ -18,6 +18,7 @@ USER root
 
 # Install the necessary os packages
 ENV DEBIAN_FRONTEND noninteractive
+RUN sed -i 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list
 RUN apt-get update && apt-get -yq dist-upgrade \
  && apt-get install -yq --no-install-recommends \
     software-properties-common \
@@ -28,6 +29,8 @@ RUN apt-get update && apt-get -yq dist-upgrade \
     locales \
     fonts-liberation \
     apt-utils \
+    curl \
+    git \
     vim
 
 # Install python3 and upgrade pip

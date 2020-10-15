@@ -20,6 +20,7 @@
 ## 2 Prohibited
 ## 3 Exclusive Process
 nvidia-smi -i ${GPU_ID} -c ${MODE_ID}
+nvidia-smi  --query | grep 'Compute Mode' ## check for the result
 ```
 
 ### command search
@@ -48,8 +49,17 @@ plt.style.use('seaborn-darkgrid')
 ## get index from list by condition
 def indices(list, filtr=lambda x: bool(x)):
   return [i for i,x in enumerate(list) if filtr(x)]
-```
 
+## consecutive itertools
+from itertools import islice, tee
+
+def nwise(iterable, n=2):
+    iters = tee(iterable, n)
+    for i, it in enumerate(iters):
+        next(islice(it, i, i), None)
+    return zip(*iters)
+
+```
 
 ## Docker configuration
 
