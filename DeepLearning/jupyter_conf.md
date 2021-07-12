@@ -12,7 +12,7 @@
 
 ```bash
 cat>>~/.bashrc<<EOF
-export WORKON_HOME=${HOME}/.virtualenvs
+export WORKON_HOME=${HOME}.virtualenvs
 . /usr/local/bin/virtualenvwrapper.sh
 EOF
 ```
@@ -36,7 +36,7 @@ Writing default config to: [HOME_FOLDER]/.jupyter/jupyter_notebook_config.py
 
 ```bash
 sed -i "s/#c.NotebookApp.ip = 'localhost'/c.NotebookApp.ip = '0.0.0.0'/g" ${HOME}/.jupyter/jupyter_notebook_config.py
-sed -i "s/#c.NotebookApp.notebook_dir = ''/c.NotebookApp.notebook_dir = '[FOLDER_YOU_WANT]'/g" ${HOME}/.jupyter/jupyter_notebook_config.py
+sed -i "s/#c.NotebookApp.notebook_dir = u''/c.NotebookApp.notebook_dir = u'[FOLDER_YOU_WANT]'/g" ${HOME}/.jupyter/jupyter_notebook_config.py
 sed -i "s/#c.NotebookApp.port = 8888/c.NotebookApp.port = [PORT_YOU_WANT]/g" ${HOME}/.jupyter/jupyter_notebook_config.py
 sed -i "s/#c.NotebookApp.open_browser = True/c.NotebookApp.open_browser = False/g" ${HOME}/.jupyter/jupyter_notebook_config.py
 ```
@@ -50,17 +50,17 @@ sed -i "s/#c.NotebookApp.open_browser = True/c.NotebookApp.open_browser = False/
 - add useful alias for the jupyter
 
 ```bash
-alias jupyter_on='jupyter notebook 2>~/jupyter.log&'
-JUPYTER_ID=`ps aux | grep -i 'jupyter-notebook' | grep $(whoami) | head -1 | awk '{print $2}'`
+alias jupyter_on='jupyter lab 2>~/jupyter.log&'
+JUPYTER_ID=`ps aux | grep -i 'jupyter-lab' | grep $(whoami) | head -1 | awk '{print $2}'`
 alias jupyter_off='kill -9 $JUPYTER_ID'
 ```
 
 ## Create python virtualenv
 
 ```bash
-mkvirtualenv -p python3.6 p_infra
-workon p_infra
-(p_infra) python -m ipykernel install --user --name=p_infra
+mkvirtualenv -p python3.6 [ENV_NAME]
+workon [ENV_NAME]
+([ENV_NAME]) python -m ipykernel install --user --name=[ENV_NAME]
 ```
 
 ## extra

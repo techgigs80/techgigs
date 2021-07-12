@@ -63,7 +63,7 @@ docker stop $(docker ps -a -q) (for stopping containers)
 docker rm $(docker ps -a -q) (for removing the containers)
 ```
 
-## Install the nvidia driver
+## Install the nvidia docker
 
 ```bash
 ## for removing the existing GPU based containers
@@ -74,11 +74,9 @@ sudo apt-get purge -y nvidia-docker
 ## Add the nvidia-docker repository and install the nvidia-docker
 
 ```bash
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | \
-  sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
-  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
 sudo apt-get update --fix-missing
 
 ## install nvidia-docker
@@ -110,7 +108,7 @@ NV_GPU='0,1,3,4'  nvidia-docker run -d \
                                     -e NB_GID=[GROUP_ID_YOU_CREATED] \
                                     -v [WORK_FOLDER_YOU_WANT]:/home/jovyan/work/ \
                                     --name [NAME_YOU_WANT] \
-                                    lucas.ku/jupyterlab:0.1
+                                    lucas.ku/jupyter-lab:0.1
 
 ## visdom configuration
 git clone https://github.com/facebookresearch/visdom.git [FOLDER_YOU_WANT]/visdom
