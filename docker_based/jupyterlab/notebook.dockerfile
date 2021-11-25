@@ -23,13 +23,14 @@ ENV DEBIAN_FRONTEND noninteractive
 COPY posco_ict_sha_256_encryted.crt /usr/local/share/ca-certificates/
 RUN update-ca-certificates
 
-RUN sed -i 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list
+RUN sed -i 's/archive.ubuntu.com/ftp.kaist.ac.kr/g' /etc/apt/sources.list
 RUN apt-get update \
     && apt-get -yq dist-upgrade \
     && apt-get install -yq --no-install-recommends \
                 software-properties-common wget \
                 bzip2 ca-certificates \
                 sudo locales fonts-liberation \
+		htop openssh-server unzip curl \
                 build-essential python3-dev python3-pip python3-setuptools \
                 net-tools vim \
     && rm -rf /var/lib/apt/lists/*
@@ -55,8 +56,13 @@ ENV SHELL=/bin/bash \
     WORK_FOLDER="\/home\/${NB_USER}\/workspace"
 ENV HOME=/home/${NB_USER}
 
-RUN echo 'root:${PASSWORD}' |chpasswd
+RUN echo 'root:${PASSWORD}' | chpasswd
 
+RUN sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+RUN sed -ri 's/^#PasswordAuthentication/PasswordAuthentication/' /etc/ssh/sshd_config
+RUN sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config
+
+RUN mkdir /root/.ssh
 # Add a script that we will use to correct permissions after running certain commands
 ADD fix-permissions /usr/local/bin/fix-permissions
 
@@ -91,7 +97,7 @@ RUN mkdir /home/${NB_USER}/workspace \
     && fix-permissions /home/${NB_USER}
 
 ## Build the virtualenv for python3
-RUN sudo -H pip install virtualenv virtualenvwrapper jupyterlab seaborn tqdm\
+RUN sudo -H python -m pip install virtualenv virtualenvwrapper jupyterlab seaborn tqdm\
     && echo "export PATH=/home/${NB_USER}/.local/bin:${PATH}" \
     && echo "export EDITOR=vim" >> ${HOME}/.bashrc \
     && echo "export CUDA_HOME=/usr/local/cuda" >> ${HOME}/.bashrc \
@@ -107,12 +113,15 @@ RUN jupyter notebook --generate-config \
 
 USER root
 
-EXPOSE 6006 8888
+EXPOSE 22 6006 8888
 WORKDIR ${HOME}
 
 # Configure container startup
-ENTRYPOINT ["tini", "-g", "--"]
-CMD ["start-notebook.sh"]
+#ENTRYPOINT ["tini", "-g", "-s", "--"]
+#ENTRYPOINT /usr/bin/sudo /etc/init.d/ssh start;tini -g -s --
+#CMD ["start-notebook.sh"]
+#CMD tini -g start-notebook.sh;sudo /etc/init.d/ssh start
+CMD bash -c 'sudo /etc/init.d/ssh start' && tini -g -s start-notebook.sh
 
 # Add local files as late as possible to avoid cache busting
 COPY start.sh /usr/local/bin/
